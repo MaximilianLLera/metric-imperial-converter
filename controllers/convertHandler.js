@@ -1,106 +1,126 @@
-'use strict';
+const VALID_UNITS = ['gal','l','mi','km','lbs','kg'];
 
-// Tabla con las unidades, sus factores de conversión y nombres completos
-const CONVERSION = {
-  gal: { returnUnit: 'L', factor: 3.78541, spelled: 'gallons' },
-  l:   { returnUnit: 'gal', factor: 1 / 3.78541, spelled: 'liters' },
-  mi:  { returnUnit: 'km', factor: 1.60934, spelled: 'miles' },
-  km:  { returnUnit: 'mi', factor: 1 / 1.60934, spelled: 'kilometers' },
-  lbs: { returnUnit: 'kg', factor: 0.453592, spelled: 'pounds' },
-  kg:  { returnUnit: 'lbs', factor: 1 / 0.453592, spelled: 'kilograms' }
+const SPELL_OUT = {
+  gal: 'gallons',
+  L: 'liters',
+  l: 'liters',
+  mi: 'miles',
+  km: 'kilometers',
+  lbs: 'pounds',
+  kg: 'kilograms'
 };
 
-// Función auxiliar para redondear a 5 decimales
-function round5(val) {
-  return Math.round(val * 100000) / 100000;
-}
+// conversion rates (to returnUnit)
+const CONVERSION = {
+  gal: { unit: 'L', factor: 3.78541 },
+  L:   { unit: 'gal', factor: 1/3.78541 },
+  l:   { unit: 'gal', factor: 1/3.78541 },
+  lbs: { unit: 'kg', factor: 0.453592 },
+  kg:  { unit: 'lbs', factor: 1/0.453592 },
+  mi:  { unit: 'km', factor: 1.60934 },
+  km:  { unit: 'mi', factor: 1/1.60934 }
+};
 
-// Función para leer y validar el número
 function parseNumber(input) {
-  if (!input || input.trim() === '') return { error: false, value: 1 };
+  // get substring until first letter
+  const match = input.match(/^[^a-zA-Z]*/);
+  const numStr = (match && match[0]) ? match[0].trim() : '';
+  if (!numStr) return { value: 1, err: null }; // default to 1
 
-  const idx = input.search(/[a-zA-Z]/);
-  const numStr = idx === -1 ? input : input.slice(0, idx);
-
-  if (numStr.trim() === '') return { error: false, value: 1 };
-
+  // check for multiple slashes (invalid)
   const slashCount = (numStr.match(/\//g) || []).length;
-  if (slashCount > 1) return { error: true, message: 'invalid number' };
+  if (slashCount > 1) return { value: null, err: 'invalid number' };
 
-  try {
-    if (slashCount === 1) {
-      const [numPart, denPart] = numStr.split('/');
-      if (numPart === '' || denPart === '') return { error: true, message: 'invalid number' };
-      const num = parseFloat(numPart);
-      const den = parseFloat(denPart);
-      if (isNaN(num) || isNaN(den)) return { error: true, message: 'invalid number' };
-      return { error: false, value: num / den };
-    } else {
-      const val = parseFloat(numStr);
-      if (isNaN(val)) return { error: true, message: 'invalid number' };
-      return { error: false, value: val };
-    }
-  } catch (err) {
-    return { error: true, message: 'invalid number' };
+  // if fraction like 3/2 or decimal or 2.5/6 (decimal numerator or denominator)
+  if (slashCount === 1) {
+    const [num, den] = numStr.split('/');
+    if (!num || !den) return { value: null, err: 'invalid number' };
+    const n = parseFloat(num);
+    const d = parseFloat(den);
+    if (isNaN(n) || isNaN(d) || d === 0) return { value: null, err: 'invalid number' };
+    return { value: n / d, err: null };
   }
+
+  // no slash: plain number
+  const val = parseFloat(numStr);
+  if (isNaN(val)) return { value: null, err: 'invalid number' };
+  return { value: val, err: null };
 }
 
-// Función para leer y validar la unidad
 function parseUnit(input) {
-  if (!input) return { error: true, message: 'invalid unit' };
-  const idx = input.search(/[a-zA-Z]/);
-  const unitPart = idx === -1 ? '' : input.slice(idx).trim();
+  const unitMatch = input.match(/[a-zA-Z]+$/);
+  if (!unitMatch) return { unit: null, err: 'invalid unit' };
+  let unit = unitMatch[0];
 
-  if (!unitPart) return { error: true, message: 'invalid unit' };
+  // Accept both upper and lower. standardize to lowercase except 'L'
+  if (unit.toLowerCase() === 'l') unit = 'L'; // prefer uppercase for liter
+  else unit = unit.toLowerCase();
 
-  const unitLower = unitPart.toLowerCase();
-  const normalized = unitLower === 'l' ? 'l' : unitLower;
-
-  if (CONVERSION.hasOwnProperty(normalized)) {
-    return { error: false, value: normalized };
+  // validate
+  const validLower = VALID_UNITS.map(u => u.toLowerCase());
+  if (validLower.includes(unit.toLowerCase()) || unit === 'L') {
+    return { unit, err: null };
   } else {
-    return { error: true, message: 'invalid unit' };
+    return { unit: null, err: 'invalid unit' };
   }
 }
 
-// Devuelve la unidad de destino (ej: gal → L)
-function getReturnUnit(initUnit) {
-  const lower = initUnit.toLowerCase();
-  const info = CONVERSION[lower];
-  if (!info) return null;
-  return info.returnUnit;
+function formatResult(initNum, initUnit, returnNum, returnUnit) {
+  // ensure unit string form: liters -> 'L' uppercase; others lower
+  const initUnitDisplay = (initUnit.toLowerCase() === 'l') ? 'L' : initUnit.toLowerCase();
+  const returnUnitDisplay = (returnUnit.toLowerCase() === 'l') ? 'L' : returnUnit.toLowerCase();
+
+  const initUnitString = (initUnitDisplay === 'L') ? 'liters' : SPELL_OUT[initUnitDisplay] || SPELL_OUT[initUnit];
+  const returnUnitString = (returnUnitDisplay === 'L') ? 'liters' : SPELL_OUT[returnUnitDisplay];
+
+  const roundedReturnNum = Number(returnNum.toFixed(5));
+  return {
+    initNum,
+    initUnit: initUnitDisplay,
+    returnNum: roundedReturnNum,
+    returnUnit: returnUnitDisplay,
+    string: `${initNum} ${initUnitString} converts to ${roundedReturnNum} ${returnUnitString}`
+  };
 }
 
-// Devuelve el nombre completo de la unidad (ej: mi → miles)
-function spellOutUnit(unit) {
-  const lower = unit.toLowerCase();
-  if (!CONVERSION[lower]) return null;
-  return CONVERSION[lower].spelled;
-}
-
-// Realiza la conversión numérica
 function convert(initNum, initUnit) {
-  const lower = initUnit.toLowerCase();
-  const info = CONVERSION[lower];
-  if (!info) return null;
-  const result = initNum * info.factor;
-  return round5(result);
+  // normalized key for conversions
+  const key = (initUnit === 'L') ? 'L' : initUnit.toLowerCase();
+  const conv = CONVERSION[key];
+  if (!conv) return null;
+  const result = initNum * conv.factor;
+  const returnUnit = conv.unit;
+  return { result, returnUnit };
 }
 
-// Arma el texto explicativo final
-function getString(initNum, initUnit, returnNum, returnUnit) {
-  const initSpelled = spellOutUnit(initUnit);
-  const returnSpelled = spellOutUnit(returnUnit);
-  return `${initNum} ${initSpelled} converts to ${returnNum} ${returnSpelled}`;
-}
-
-// Exporta las funciones para que se usen en api.js
 module.exports = {
-  parseNumber,
-  parseUnit,
-  getReturnUnit,
-  spellOutUnit,
-  convert,
-  getString,
-  round5
+  handleConvert(req, res) {
+    const input = req.query.input;
+    if (typeof input === 'undefined') {
+      return res.json({ error: 'no input' });
+    }
+
+    const numParsed = parseNumber(input);
+    const unitParsed = parseUnit(input);
+
+    // handle combined errors
+    if (numParsed.err && unitParsed.err) {
+      return res.send('invalid number and unit');
+    }
+    if (numParsed.err) {
+      return res.send('invalid number');
+    }
+    if (unitParsed.err) {
+      return res.send('invalid unit');
+    }
+
+    const initNum = numParsed.value;
+    const initUnit = unitParsed.unit; // may be 'L' or lower-case unit
+    const conv = convert(initNum, initUnit);
+
+    if (!conv) return res.send('invalid unit');
+
+    const out = formatResult(initNum, initUnit, conv.result, conv.returnUnit);
+    return res.json(out);
+  }
 };
