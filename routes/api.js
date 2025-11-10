@@ -1,35 +1,24 @@
 'use strict';
 
-const express = require('express');
-const router = express.Router();
-const handler = require('../controllers/convertHandler.js');
+const ConvertHandler = require('../controllers/convertHandler.js');
 
-router.get('/convert', (req, res) => {
-  const input = req.query.input;
-  const numResult = handler.parseNumber(input);
-  const unitResult = handler.parseUnit(input);
+module.exports = function (app) {
+  const convertHandler = new ConvertHandler();
 
-  if (numResult.error && unitResult.error) {
-    return res.send('invalid number and unit');
-  } else if (numResult.error) {
-    return res.send('invalid number');
-  } else if (unitResult.error) {
-    return res.send('invalid unit');
-  }
+  app.get('/api/convert', (req, res) => {
+    const input = req.query.input;
 
-  const initNum = numResult.value;
-  const initUnit = unitResult.value;
-  const returnNum = handler.convert(initNum, initUnit);
-  const returnUnit = handler.getReturnUnit(initUnit);
-  const string = handler.getString(initNum, initUnit, returnNum, returnUnit);
+    const initNum = convertHandler.getNum(input);
+    const initUnit = convertHandler.getUnit(input);
 
-  res.json({
-    initNum,
-    initUnit,
-    returnNum,
-    returnUnit,
-    string
+    if (!initNum && !initUnit) return res.send('invalid number and unit');
+    if (!initNum) return res.send('invalid number');
+    if (!initUnit) return res.send('invalid unit');
+
+    const returnNum = convertHandler.convert(initNum, initUnit);
+    const returnUnit = convertHandler.getReturnUnit(initUnit);
+    const string = convertHandler.getString(initNum, initUnit, returnNum, returnUnit);
+
+    res.json({ initNum, initUnit, returnNum, returnUnit, string });
   });
-});
-
-module.exports = router;
+};

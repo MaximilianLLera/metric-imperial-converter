@@ -1,94 +1,79 @@
-const VALID_UNITS = ['gal', 'L', 'mi', 'km', 'lbs', 'kg'];
+function ConvertHandler() {
+  this.getNum = function (input) {
+    let result;
+    const match = input.match(/^[\d/.]+/);
+    if (!match) return 1;
+    const numStr = match[0];
 
-const CONVERSION = {
-  gal: { returnUnit: 'L', factor: 3.78541 },
-  L:   { returnUnit: 'gal', factor: 1 / 3.78541 },
-  lbs: { returnUnit: 'kg', factor: 0.453592 },
-  kg:  { returnUnit: 'lbs', factor: 1 / 0.453592 },
-  mi:  { returnUnit: 'km', factor: 1.60934 },
-  km:  { returnUnit: 'mi', factor: 1 / 1.60934 }
-};
+    // check invalid multiple fractions
+    if ((numStr.match(/\//g) || []).length > 1) return null;
 
-const SPELL_OUT = {
-  gal: 'gallons',
-  L: 'liters',
-  lbs: 'pounds',
-  kg: 'kilograms',
-  mi: 'miles',
-  km: 'kilometers'
-};
+    try {
+      result = eval(numStr);
+    } catch (e) {
+      return null;
+    }
 
-function parseNumber(input) {
-  const numMatch = input.match(/^[.\d\/]+/);
-  const numStr = numMatch ? numMatch[0] : '';
-  if (!numStr) return { value: 1, err: null };
+    if (isNaN(result)) return null;
+    return result;
+  };
 
-  const slashCount = (numStr.match(/\//g) || []).length;
-  if (slashCount > 1) return { value: null, err: 'invalid number' };
+  this.getUnit = function (input) {
+    const match = input.match(/[a-zA-Z]+$/);
+    if (!match) return null;
+    let unit = match[0].toLowerCase();
 
-  if (slashCount === 1) {
-    const [num, den] = numStr.split('/');
-    const n = parseFloat(num);
-    const d = parseFloat(den);
-    if (isNaN(n) || isNaN(d) || d === 0) return { value: null, err: 'invalid number' };
-    return { value: n / d, err: null };
-  }
+    const validUnits = ['gal', 'l', 'mi', 'km', 'lbs', 'kg'];
+    if (!validUnits.includes(unit)) return null;
 
-  const val = parseFloat(numStr);
-  if (isNaN(val)) return { value: null, err: 'invalid number' };
-  return { value: val, err: null };
-}
+    // normalize 'l' to uppercase L
+    if (unit === 'l') return 'L';
+    return unit;
+  };
 
-function parseUnit(input) {
-  const unitMatch = input.match(/[a-zA-Z]+$/);
-  if (!unitMatch) return { unit: null, err: 'invalid unit' };
+  this.getReturnUnit = function (initUnit) {
+    const unitMap = {
+      gal: 'L',
+      L: 'gal',
+      lbs: 'kg',
+      kg: 'lbs',
+      mi: 'km',
+      km: 'mi',
+    };
+    return unitMap[initUnit];
+  };
 
-  let unit = unitMatch[0].toLowerCase();
-  if (unit === 'l') unit = 'L';
+  this.spellOutUnit = function (unit) {
+    const spell = {
+      gal: 'gallons',
+      L: 'liters',
+      lbs: 'pounds',
+      kg: 'kilograms',
+      mi: 'miles',
+      km: 'kilometers',
+    };
+    return spell[unit];
+  };
 
-  if (!VALID_UNITS.includes(unit)) return { unit: null, err: 'invalid unit' };
-  return { unit, err: null };
-}
+  this.convert = function (initNum, initUnit) {
+    const conversionRates = {
+      gal: 3.78541,
+      L: 1 / 3.78541,
+      lbs: 0.453592,
+      kg: 1 / 0.453592,
+      mi: 1.60934,
+      km: 1 / 1.60934,
+    };
 
-function convert(initNum, initUnit) {
-  const conv = CONVERSION[initUnit];
-  if (!conv) return null;
-  const returnNum = initNum * conv.factor;
-  const returnUnit = conv.returnUnit;
-  return { returnNum, returnUnit };
-}
+    const result = initNum * conversionRates[initUnit];
+    return Number(result.toFixed(5));
+  };
 
-function formatResult(initNum, initUnit, returnNum, returnUnit) {
-  const rounded = parseFloat(returnNum.toFixed(5));
-  const string = `${initNum} ${SPELL_OUT[initUnit]} converts to ${rounded} ${SPELL_OUT[returnUnit]}`;
-  return {
-    initNum,
-    initUnit,
-    returnNum: rounded,
-    returnUnit,
-    string
+  this.getString = function (initNum, initUnit, returnNum, returnUnit) {
+    const initSpell = this.spellOutUnit(initUnit);
+    const returnSpell = this.spellOutUnit(returnUnit);
+    return `${initNum} ${initSpell} converts to ${returnNum} ${returnSpell}`;
   };
 }
 
-module.exports = {
-  handleConvert(req, res) {
-    const input = req.query.input;
-    if (!input) return res.send('invalid number and unit');
-
-    const numParsed = parseNumber(input);
-    const unitParsed = parseUnit(input);
-
-    if (numParsed.err && unitParsed.err) return res.send('invalid number and unit');
-    if (numParsed.err) return res.send('invalid number');
-    if (unitParsed.err) return res.send('invalid unit');
-
-    const { value: initNum } = numParsed;
-    const { unit: initUnit } = unitParsed;
-    const conv = convert(initNum, initUnit);
-    if (!conv) return res.send('invalid unit');
-
-    const out = formatResult(initNum, initUnit, conv.returnNum, conv.returnUnit);
-    res.json(out);
-  }
-};
-
+module.exports = ConvertHandler;
